@@ -1,43 +1,31 @@
+from asyncio.log import logger
 import httpx
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from app.core.config import settings
 
 class TranscriptAnalyzerClient:
-    def __init__(self, base_url: str = "https://sandbox-vfai.verbaflo.com"):
-        self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=40)
+    def __init__(self, base_url: Optional[str] = None, timeout: Optional[int] = None):
+        self.base_url = base_url or getattr(settings, "transcript_analyzer_url", "https://sandbox-vfai.verbaflo.com/customer/transcript_analyzer")
+        self.timeout = timeout or getattr(settings, "request_timeout", 60)
+        self._client = httpx.AsyncClient(timeout=self.timeout)
 
     async def analyze_transcript(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calls the transcript analyzer endpoint
-        exactly like your cURL request.
-        """
-        
-        url = f"{self.base_url}/customer/transcript_analyzer"
-
         try:
-            response = await self.client.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            return response.json()
-
+            resp = await self._client.post(self.base_url, headers={"Content-Type": "application/json"}, json=payload)
+            resp.raise_for_status()
+            return resp.json()
         except httpx.TimeoutException:
-            return {"error": "Transcript analyzer timed out"}
-
+            logger.exception("Transcript analyzer timed out")
+            return {"error": "timeout"}
         except httpx.HTTPStatusError as e:
-            return {
-                "error": "HTTP error from transcript analyzer",
-                "status": e.response.status_code,
-                "body": e.response.text
-            }
-
+            logger.exception("Transcript analyzer HTTP error: %s", e)
+            return {"error": "http_error", "status_code": e.response.status_code, "body": e.response.text}
         except Exception as e:
-            return {"error": f"Unexpected error: {str(e)}"}
+            logger.exception("Unexpected error calling transcript analyzer: %s", e)
+            return {"error": "unexpected", "detail": str(e)}
 
     async def close(self):
-        await self.client.aclose()
-
-
-transcript_client = TranscriptAnalyzerClient()
+        try:
+            await self._client.aclose()
+        except Exception:
+            pass

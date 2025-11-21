@@ -6,8 +6,6 @@ class EvalRow(BaseModel):
     transcript: Optional[str]
     lead_data: Optional[str]
     latest_message: Optional[str]
-# extend with other columns as needed
-
 
 class EvalResult(BaseModel):
     original_row: Dict[str, Any]
