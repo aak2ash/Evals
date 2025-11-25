@@ -7,14 +7,21 @@ import pandas as pd
 from app.services import transcript_client
 from app.services.evals_service import EvalsService
 from app.services.data_store import universal_data_store
-from app.models.schema import TextFieldsResponse, ExcelDataResponse, UniversalDatasetResponse
-# from app.utils.openai_client import OpenAIClient
+from app.models.schema import (
+    TextFieldsResponse, 
+    ExcelDataResponse, 
+    DocumentListResponse,
+    DocumentDetailResponse,
+    DocumentSummary,
+    OutputDetailResponse,
+    OutputListResponse
+)
 
 
 class EvalsController:
     def __init__(self, service: EvalsService):
         self.service = service
-        self.transcript_analyzer = service.transcript_client  # already created inside service
+        self.transcript_analyzer = service.transcript_client
 
     async def handle_upload_and_process(self, upload_file: UploadFile) -> List[Dict[str, Any]]:
         suffix = os.path.splitext(upload_file.filename)[1] or ".xlsx"
@@ -35,7 +42,6 @@ class EvalsController:
         await self.service.close()
 
     async def handle_excel_read(self, upload_file: UploadFile) -> ExcelDataResponse:
-        """Read an excel file and return its data"""
         suffix = os.path.splitext(upload_file.filename)[1] or ".xlsx"
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp_path = tmp.name
@@ -45,23 +51,19 @@ class EvalsController:
             await out.write(await upload_file.read())
 
         try:
-            # Read all sheets from excel file
             excel_file = pd.ExcelFile(tmp_path)
             sheet_names = excel_file.sheet_names
             
-            # Read data from all sheets
             all_data = []
             uniform_records = []
             
             for sheet_name in sheet_names:
                 df = pd.read_excel(tmp_path, sheet_name=sheet_name)
-                # Convert DataFrame to list of dictionaries
                 sheet_data = df.to_dict(orient='records')
                 for record in sheet_data:
                     record['_sheet_name'] = sheet_name
                     all_data.append(record)
                     
-                    # Extract uniform fields from Excel record
                     uniform_record = {
                         "client_code": record.get("client_code"),
                         "transcript": record.get("transcript"),
@@ -73,7 +75,6 @@ class EvalsController:
             
             total_rows = len(all_data)
             
-            # Add all records to universal dataset with uniform structure
             universal_data_store.add_uniform_records(uniform_records, source="excel_upload")
             
             return ExcelDataResponse(
@@ -85,8 +86,6 @@ class EvalsController:
             os.remove(tmp_path)
 
     def handle_text_fields(self, fields_data: Dict[str, str]) -> TextFieldsResponse:
-        """Process multiple text fields and return the data"""
-        # Add the text fields data to universal dataset with uniform structure
         universal_data_store.add_uniform_record(
             client_code=fields_data.get("client_code"),
             transcript=fields_data.get("transcript"),
@@ -100,53 +99,168 @@ class EvalsController:
             received_data=fields_data
         )
     
-    def get_universal_dataset(self) -> UniversalDatasetResponse:
-        """Retrieve all data from the universal dataset"""
-        all_data = universal_data_store.get_all_data()
-        total_records = universal_data_store.get_data_count()
+    async def process_document_by_id(self, document_id: str) -> Dict[str, Any]:
+        doc = universal_data_store.get_document_by_id(document_id)
         
-        return UniversalDatasetResponse(
-            total_records=total_records,
-            data=all_data
-        )
-    
-    async def process_universal_dataset(self) -> Dict[str, Any]:
-        """
-        Process the universal dataset through the same evaluation pipeline 
-        as handle_upload_and_process, but using the accumulated dataset
-        """
-        # Get all data from universal dataset
-        all_data = universal_data_store.get_all_data()
+        if not doc:
+            raise ValueError(f"Document with ID '{document_id}' not found")
         
-        if not all_data:
+        document_type = doc.get("document_type")
+        
+        if document_type == "excel_upload":
+            records = doc.get("records", [])
+            output_filename = f"{document_id}_evaluated.xlsx"
+        elif document_type == "text_field_entry":
+            records = [doc.get("entry", {})]
+            output_filename = f"{document_id}_evaluated.xlsx"
+        elif document_type == "universal_dataset":
+            records = doc.get("records", [])
+            output_filename = "universal_dataset_evaluated.xlsx"
+        else:
+            raise ValueError(f"Unknown document type: {document_type}")
+        
+        if not records:
             return {
                 "success": False,
-                "message": "No data in universal dataset. Please add data first.",
+                "message": f"No records found in document '{document_id}'",
                 "output_file": None
             }
         
-        # Convert universal dataset to DataFrame
-        df = pd.DataFrame(all_data)
+        df = pd.DataFrame(records)
         
-        # Create temporary Excel file from the dataset
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
         tmp_path = tmp.name
         tmp.close()
         
         try:
-            # Write the dataset to temporary Excel file
             df.to_excel(tmp_path, index=False, engine='openpyxl')
             
-            # Process the Excel file using the same logic as handle_upload_and_process
-            results_path = await self.service.process_excel(tmp_path, output_filename="universal_dataset_evaluated.xlsx")
+            results_path = await self.service.process_excel(tmp_path, output_filename=output_filename)
+            
+            processed_df = pd.read_excel(results_path, engine='openpyxl')
+            processed_records = processed_df.to_dict(orient='records')
+            
+            output_document_id = universal_data_store.store_processed_output(
+                source_document_id=document_id,
+                processed_records=processed_records,
+                output_file_path=results_path
+            )
             
             return {
                 "success": True,
-                "message": f"Successfully processed {len(all_data)} records from universal dataset",
+                "message": f"Successfully processed {len(records)} records from document '{document_id}'",
                 "output_file": results_path,
-                "total_records": len(all_data)
+                "output_document_id": output_document_id,
+                "total_records": len(records)
             }
         finally:
-            # Clean up temporary file
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+    
+    def list_all_documents(self) -> DocumentListResponse:
+        excel_uploads = universal_data_store.get_all_excel_uploads()
+        excel_summaries = []
+        for doc in excel_uploads:
+            summary = DocumentSummary(
+                document_id=doc.get("document_id"),
+                document_type=doc.get("document_type"),
+                created_updated_at=doc.get("uploaded_at", ""),
+                record_count=doc.get("record_count", 0),
+                description=f"Excel upload with {doc.get('record_count', 0)} records"
+            )
+            excel_summaries.append(summary)
+        
+        text_field_entries = universal_data_store.get_all_text_field_entries()
+        text_field_summaries = []
+        for doc in text_field_entries:
+            summary = DocumentSummary(
+                document_id=doc.get("document_id"),
+                document_type=doc.get("document_type"),
+                created_updated_at=doc.get("created_at", ""),
+                record_count=1,  
+                description=f"Text field entry"
+            )
+            text_field_summaries.append(summary)
+        
+        universal_doc = universal_data_store.get_universal_dataset_from_mongo()
+        universal_summary = None
+        if universal_doc:
+            universal_summary = DocumentSummary(
+                document_id=universal_doc.get("document_id"),
+                document_type=universal_doc.get("document_type"),
+                created_updated_at=universal_doc.get("updated_at", ""),
+                record_count=universal_doc.get("record_count", 0),
+                description=f"Universal dataset containing all {universal_doc.get('record_count', 0)} records"
+            )
+        
+        total_documents = len(excel_summaries) + len(text_field_summaries) + (1 if universal_summary else 0)
+        
+        return DocumentListResponse(
+            total_documents=total_documents,
+            excel_uploads=excel_summaries,
+            text_field_entries=text_field_summaries,
+            universal_dataset=universal_summary
+        )
+    
+    def get_document_by_id(self, document_id: str) -> DocumentDetailResponse:
+        doc = universal_data_store.get_document_by_id(document_id)
+        
+        if not doc:
+            raise ValueError(f"Document with ID '{document_id}' not found")
+        
+        document_type = doc.get("document_type")
+        
+        if document_type == "excel_upload":
+            records = doc.get("records", [])
+            created_updated_at = doc.get("uploaded_at", "")
+        elif document_type == "text_field_entry":
+            records = [doc.get("entry", {})]
+            created_updated_at = doc.get("created_at", "")
+        elif document_type == "universal_dataset":
+            records = doc.get("records", [])
+            created_updated_at = doc.get("updated_at", "")
+        else:
+            records = []
+            created_updated_at = ""
+        
+        return DocumentDetailResponse(
+            document_id=document_id,
+            document_type=document_type,
+            created_updated_at=created_updated_at,
+            record_count=len(records),
+            records=records
+        )
+    
+    def get_output_by_id(self, output_document_id: str) -> OutputDetailResponse:
+        output_doc = universal_data_store.get_output_by_id(output_document_id)
+        
+        if not output_doc:
+            raise ValueError(f"Output document with ID '{output_document_id}' not found")
+        
+        return OutputDetailResponse(
+            output_document_id=output_doc.get("output_document_id"),
+            source_document_id=output_doc.get("source_document_id"),
+            processed_at=output_doc.get("processed_at", ""),
+            record_count=output_doc.get("record_count", 0),
+            output_file_path=output_doc.get("output_file_path", ""),
+            processed_records=output_doc.get("processed_records", [])
+        )
+    
+    def list_all_outputs(self) -> OutputListResponse:
+        all_outputs = universal_data_store.get_all_outputs()
+        
+        output_summaries = []
+        for output in all_outputs:
+            summary = {
+                "output_document_id": output.get("output_document_id"),
+                "source_document_id": output.get("source_document_id"),
+                "processed_at": output.get("processed_at"),
+                "record_count": output.get("record_count"),
+                "output_file_path": output.get("output_file_path")
+            }
+            output_summaries.append(summary)
+        
+        return OutputListResponse(
+            total_outputs=len(output_summaries),
+            outputs=output_summaries
+        )

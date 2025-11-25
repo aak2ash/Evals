@@ -9,5 +9,4 @@ app.include_router(evals_routes.router)
 
 @app.on_event("shutdown")
 async def shutdown_event():
-# If you created any global clients, close them here
     pass

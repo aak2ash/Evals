@@ -1,4 +1,3 @@
-# app/services/evals_service.py
 from asyncio.log import logger
 import json
 from typing import Any, Dict,Optional
@@ -12,14 +11,15 @@ class FeedbackService:
                  api_key: Optional[str] = None,
                  model: Optional[str] = None,
                  timeout: Optional[int] = None):
-        self.base_url = base_url or getattr(settings, "openai_base_url", "https://api.openai.com/v1")
-        self.api_key = api_key or getattr(settings, "openai_api_key", None)
-        self.model = model or getattr(settings, "openai_model", "gpt-4o-mini")
-        self.timeout = timeout or getattr(settings, "request_timeout", 60)
+        self.base_url = base_url or settings.openai_base_url
+        self.api_key = api_key or settings.openai_api_key
+        self.model = model or settings.openai_model
+        self.timeout = timeout or settings.request_timeout
         self._client = httpx.AsyncClient(timeout=self.timeout)
 
         if not self.api_key:
             logger.warning("OPENAI_API_KEY not set in settings; FeedbackService will fail if used.")
+            raise ValueError("OPENAI_API_KEY not set in settings")
 
     async def score(self,
                     expected: str,

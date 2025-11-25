@@ -1,4 +1,3 @@
-# app/services/evals_service.py
 import os
 import asyncio
 import json

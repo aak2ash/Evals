@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any, List, Dict
 
-
 class EvalRow(BaseModel):
     transcript: Optional[str]
     lead_data: Optional[str]
@@ -27,7 +26,6 @@ class ExcelDataResponse(BaseModel):
     message: str = "Excel data extracted successfully"
 
 class UniversalDataRecord(BaseModel):
-    """Single record in the universal dataset with metadata"""
     id: int
     timestamp: str
     source: str
@@ -37,15 +35,49 @@ class UniversalDataRecord(BaseModel):
     latest_message: Optional[str] = None
     expected_output: Optional[str] = None
 
-
-class UniversalDatasetResponse(BaseModel):
-    total_records: int
-    data: List[UniversalDataRecord]
-    message: str = "Universal dataset retrieved successfully"
-
-
 class ProcessDatasetResponse(BaseModel):
     success: bool
     message: str
     output_file: Optional[str]
+    output_document_id: Optional[str] = None
     total_records: Optional[int] = None
+
+class DocumentSummary(BaseModel):
+    document_id: str
+    document_type: str
+    created_updated_at: str
+    record_count: int
+    description: Optional[str] = None
+
+
+class DocumentListResponse(BaseModel):
+    total_documents: int
+    excel_uploads: List[DocumentSummary]
+    text_field_entries: List[DocumentSummary]
+    universal_dataset: Optional[DocumentSummary] = None
+    message: str = "Documents retrieved successfully"
+
+
+class DocumentDetailResponse(BaseModel):
+    document_id: str
+    document_type: str
+    created_updated_at: str
+    record_count: int
+    records: List[Dict[str, Any]]
+    message: str = "Document retrieved successfully"
+
+
+class OutputDetailResponse(BaseModel):
+    output_document_id: str
+    source_document_id: str
+    processed_at: str
+    record_count: int
+    output_file_path: str
+    processed_records: List[Dict[str, Any]]
+    message: str = "Output retrieved successfully"
+
+
+class OutputListResponse(BaseModel):
+    total_outputs: int
+    outputs: List[Dict[str, Any]]
+    message: str = "Outputs retrieved successfully"
