@@ -7,10 +7,10 @@ import httpx
 
 class FeedbackService:
     def __init__(self,
-                 base_url: Optional[str] = None,
-                 api_key: Optional[str] = None,
-                 model: Optional[str] = None,
-                 timeout: Optional[int] = None):
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout: Optional[int] = None):
         self.base_url = base_url or settings.openai_base_url
         self.api_key = api_key or settings.openai_api_key
         self.model = model or settings.openai_model
@@ -22,10 +22,10 @@ class FeedbackService:
             raise ValueError("OPENAI_API_KEY not set in settings")
 
     async def score(self,
-                    expected: str,
-                    predicted: str,
-                    transcript: Optional[str] = None,
-                    extra_instructions: Optional[str] = None) -> Dict[str, Any]:
+        expected: str,
+        predicted: str,
+        transcript: Optional[str] = None,
+        extra_instructions: Optional[str] = None) -> Dict[str, Any]:
         system_prompt = (
             "You are an evaluator. Compare a predicted assistant response to an expected reference. "
             "Return a single valid JSON object (no surrounding text) with keys:\n"

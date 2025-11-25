@@ -24,10 +24,10 @@ def parse_transcript(raw: Optional[str]) -> List[Dict[str, str]]:
         return []
     messages = []
     for line in raw.split("\n"):
-        m = re.match(r"([AU]):\s*(.*)", line.strip())
+        m = re.match(r"(assistant|user):\s*(.*)", line.strip(), re.IGNORECASE)
         if not m:
             continue
-        role = "assistant" if m.group(1) == "A" else "user"
+        role = m.group(1).lower()
         messages.append({"role": role, "content": m.group(2)})
     return messages
 
