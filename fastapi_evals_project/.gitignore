@@ -23,6 +23,6 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Output files
-outputs/*.xlsx
-!outputs/.gitkeep
+# Input and output folders
+input/
+output/
