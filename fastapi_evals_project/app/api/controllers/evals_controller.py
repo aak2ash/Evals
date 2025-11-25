@@ -63,9 +63,8 @@ class EvalsController:
                 for record in sheet_data:
                     record['_sheet_name'] = sheet_name
                     all_data.append(record)
-                    
                     uniform_record = {
-                        "client_code": record.get("client_code"),
+                        "client_code": sheet_name,
                         "transcript": record.get("transcript"),
                         "lead_data": record.get("lead_data"),
                         "latest_message": record.get("latest_message"),
