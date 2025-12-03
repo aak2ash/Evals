@@ -92,10 +92,43 @@ class EvalsService:
     def _build_payload_from_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         payload = deepcopy(BASE_TEMPLATE)
         ld = parse_lead_data(row.get("lead_data", ""))
+        print(ld)
         client_code = row.get("client_code", "")
         for k, v in ld.items():
             if k in payload["lead_data"]:
+                print(k)
                 payload["lead_data"][k] = v
+                if k == 'university_name':
+                    payload["lead_data"]["university"]["id"] = None
+                    payload["lead_data"]["university"]["name"] = v
+                    continue
+                if k == 'destination_country_name':
+                    print("reached here")
+                    payload["lead_data"]["destination_country"]["id"] = None
+                    payload["lead_data"]["destination_country"]["name"] = v
+                    continue
+                if k == 'destination_city_name':
+                    payload["lead_data"]["destination_city"]["id"] = None
+                    continue
+                if k == 'budget_duration':
+                    payload["lead_data"]["budget"]["duration"] = v
+                    continue
+                if k == 'budget_currency':
+                    payload['lead_data']['budget']['currency'] = v
+                    continue
+                if k == 'min_budget':
+                    payload['lead_data']['budget']['min_budget'] = v
+                    continue
+                if k == 'max_budget':
+                    payload['lead_data']['budget']['max_budget'] = v
+                    continue
+                if k == 'lease_unit':
+                    payload['lead_data']['lease']['unit'] = v
+                if k == 'lease_value':
+                    payload['lead_data']['lease']['value'] = v
+                    continue
+        print(payload)
+        exit()
         payload["transcript"] = parse_transcript(row.get("transcript", "") or "")
         payload["latest_message"] = {
             "channel": "widget",

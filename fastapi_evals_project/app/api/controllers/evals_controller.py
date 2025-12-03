@@ -59,6 +59,7 @@ class EvalsController:
             
             for sheet_name in sheet_names:
                 df = pd.read_excel(tmp_path, sheet_name=sheet_name)
+                df = df.fillna("")  # Replace NaN values to make JSON serializable
                 sheet_data = df.to_dict(orient='records')
                 for record in sheet_data:
                     record['_sheet_name'] = sheet_name
@@ -137,6 +138,7 @@ class EvalsController:
             results_path = await self.service.process_excel(tmp_path, output_filename=output_filename)
             
             processed_df = pd.read_excel(results_path, engine='openpyxl')
+            processed_df = processed_df.fillna("")  # Replace NaN values to make JSON serializable
             processed_records = processed_df.to_dict(orient='records')
             
             output_document_id = universal_data_store.store_processed_output(
